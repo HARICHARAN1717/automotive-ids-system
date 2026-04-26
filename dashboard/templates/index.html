@@ -1,148 +1,188 @@
 <!DOCTYPE html>
-
-<html>
+<html lang="en">
 <head>
-    <title>ECU IDS Dashboard</title>
+    <meta charset="UTF-8">
+    <title>ECU IDS SOC Dashboard</title>
 
-```
-<!-- Socket.IO -->
-<script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<!-- Chart.js -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-```
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #0a0f1a;
+            color: #ffffff;
+        }
 
+        header {
+            background: #0f172a;
+            padding: 15px;
+            text-align: center;
+            font-size: 22px;
+            font-weight: bold;
+            color: #00ffd5;
+            border-bottom: 1px solid #1e293b;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            padding: 20px;
+        }
+
+        .card {
+            background: #111827;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 0 15px rgba(0,255,213,0.08);
+        }
+
+        .card h2 {
+            margin: 0;
+            font-size: 28px;
+            color: #00ffd5;
+        }
+
+        .card p {
+            margin-top: 8px;
+            color: #9ca3af;
+        }
+
+        .logs {
+            grid-column: span 2;
+            background: #0f172a;
+            padding: 15px;
+            border-radius: 12px;
+            height: 400px;
+            overflow-y: auto;
+        }
+
+        .log {
+            background: #111827;
+            margin: 8px 0;
+            padding: 10px;
+            border-left: 4px solid red;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        .chart-box {
+            grid-column: span 1;
+            background: #0f172a;
+            padding: 15px;
+            border-radius: 12px;
+        }
+
+        canvas {
+            width: 100% !important;
+            height: 250px !important;
+        }
+    </style>
 </head>
 
-<body style="background:black; color:white; font-family:monospace;">
+<body>
 
-<h1>🚗 ECU IDS LIVE DASHBOARD</h1>
+<header>
+    🚗 Automotive ECU Intrusion Detection SOC Dashboard
+</header>
 
-<!-- 🔥 Threat Score -->
+<div class="grid">
 
-<h2>🔥 Threat Level</h2>
-<h1 id="score" style="color:red;">0</h1>
+    <!-- STATS -->
+    <div class="card">
+        <h2 id="attacks">0</h2>
+        <p>Total Attacks</p>
+    </div>
 
-<!-- 📜 Logs -->
+    <div class="card">
+        <h2 id="blocked">0</h2>
+        <p>Blocked ECUs</p>
+    </div>
 
-<h2>Logs</h2>
-<div id="logs" style="height:300px; overflow:auto; border:1px solid white; padding:10px;"></div>
+    <div class="card">
+        <h2 id="threat">0</h2>
+        <p>Threat Score</p>
+    </div>
 
-<!-- 📊 Attack Type Chart -->
+    <!-- LOGS -->
+    <div class="logs" id="logBox">
+        <h3>Live Attack Feed</h3>
+    </div>
 
-<h2>Attack Stats</h2>
-<canvas id="chart"></canvas>
+    <!-- CHART -->
+    <div class="chart-box">
+        <h3 style="text-align:center;">Attack Trend</h3>
+        <canvas id="chart"></canvas>
+    </div>
 
-<!-- 📈 Timeline Chart -->
-
-<h2>📈 Attack Timeline</h2>
-<canvas id="timelineChart"></canvas>
+</div>
 
 <script>
-// Connect to backend
-const socket = io("http://127.0.0.1:5000");
+    const socket = io();
 
-// Logs container
-const logDiv = document.getElementById("logs");
+    let attacks = 0;
+    let blocked = 0;
+    let threat = 0;
 
-// Attack counts
-let counts = {};
+    const ctx = document.getElementById('chart').getContext('2d');
 
-// Timeline data
-let timelineLabels = [];
-let timelineData = [];
-
-// ==================== BAR CHART ====================
-const ctx = document.getElementById("chart").getContext("2d");
-
-const chart = new Chart(ctx, {
-    type: "bar",
-    data: {
-        labels: [],
-        datasets: [{
-            label: "Attack Count",
-            data: []
-        }]
-    },
-    options: {
-        scales: {
-            y: { beginAtZero: true }
+    const chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Attacks Over Time',
+                data: [],
+                borderColor: '#00ffd5',
+                tension: 0.3
+            }]
         }
-    }
-});
+    });
 
-// ==================== TIMELINE CHART ====================
-const timelineCtx = document.getElementById("timelineChart").getContext("2d");
+    socket.on("alert", function(data) {
 
-const timelineChart = new Chart(timelineCtx, {
-    type: "line",
-    data: {
-        labels: timelineLabels,
-        datasets: [{
-            label: "Attacks Over Time",
-            data: timelineData,
-            fill: false
-        }]
-    },
-    options: {
-        scales: {
-            y: { beginAtZero: true }
+        // LOG UI
+        let logBox = document.getElementById("logBox");
+
+        let div = document.createElement("div");
+        div.className = "log";
+
+        div.innerHTML = `
+            <b>${data.type}</b><br>
+            CAN ID: ${data.can_id}<br>
+            Severity: ${data.severity}<br>
+            Time: ${data.timestamp}
+        `;
+
+        logBox.prepend(div);
+
+        // STATS
+        attacks++;
+        document.getElementById("attacks").innerText = attacks;
+
+        if (data.type.toLowerCase().includes("block")) {
+            blocked++;
+            document.getElementById("blocked").innerText = blocked;
         }
-    }
-});
 
-// ==================== SOCKET EVENTS ====================
-socket.on("connect", () => {
-    console.log("✅ Connected to server");
-});
+        threat = Math.min(100, threat + 3);
+        document.getElementById("threat").innerText = threat;
 
-socket.on("new_log", (data) => {
-    console.log("📥 RECEIVED:", data);
+        // CHART UPDATE
+        chart.data.labels.push(attacks);
+        chart.data.datasets[0].data.push(attacks);
 
-    // Add log
-    let msg = `[${data.timestamp}] ${data.type} → ${data.can_id}`;
+        if (chart.data.labels.length > 15) {
+            chart.data.labels.shift();
+            chart.data.datasets[0].data.shift();
+        }
 
-    if (data.threat_score >= 80) {
-        msg += " 🚨 CRITICAL SYSTEM";
-    } else if (data.threat_score >= 50) {
-        msg += " ⚠️ ECU ISOLATED";
-    }
-
-    const entry = document.createElement("p");
-    entry.textContent = msg;
-    logDiv.prepend(entry);
-
-    // Update threat score
-    if (data.threat_score !== undefined) {
-        document.getElementById("score").textContent = data.threat_score;
-    }
-
-    // Update attack counts
-    if (counts[data.type]) {
-        counts[data.type]++;
-    } else {
-        counts[data.type] = 1;
-    }
-
-    chart.data.labels = Object.keys(counts);
-    chart.data.datasets[0].data = Object.values(counts);
-    chart.update();
-
-    // Update timeline
-    const time = data.timestamp.split(" ")[1];
-
-    timelineLabels.push(time);
-    timelineData.push(1);
-
-    if (timelineLabels.length > 20) {
-        timelineLabels.shift();
-        timelineData.shift();
-    }
-
-    timelineChart.update();
-});
+        chart.update();
+    });
 </script>
 
 </body>
 </html>
-
