@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+    <title>ECU IDS Dashboard</title>
+
+```
+<!-- Socket.IO -->
+<script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+```
+
+</head>
+
+<body style="background:black; color:white; font-family:monospace;">
+
+<h1>🚗 ECU IDS LIVE DASHBOARD</h1>
+
+<!-- 🔥 Threat Score -->
+
+<h2>🔥 Threat Level</h2>
+<h1 id="score" style="color:red;">0</h1>
+
+<!-- 📜 Logs -->
+
+<h2>Logs</h2>
+<div id="logs" style="height:300px; overflow:auto; border:1px solid white; padding:10px;"></div>
+
+<!-- 📊 Attack Type Chart -->
+
+<h2>Attack Stats</h2>
+<canvas id="chart"></canvas>
+
+<!-- 📈 Timeline Chart -->
+
+<h2>📈 Attack Timeline</h2>
+<canvas id="timelineChart"></canvas>
+
+<script>
+// Connect to backend
+const socket = io("http://127.0.0.1:5000");
+
+// Logs container
+const logDiv = document.getElementById("logs");
+
+// Attack counts
+let counts = {};
+
+// Timeline data
+let timelineLabels = [];
+let timelineData = [];
+
+// ==================== BAR CHART ====================
+const ctx = document.getElementById("chart").getContext("2d");
+
+const chart = new Chart(ctx, {
+    type: "bar",
+    data: {
+        labels: [],
+        datasets: [{
+            label: "Attack Count",
+            data: []
+        }]
+    },
+    options: {
+        scales: {
+            y: { beginAtZero: true }
+        }
+    }
+});
+
+// ==================== TIMELINE CHART ====================
+const timelineCtx = document.getElementById("timelineChart").getContext("2d");
+
+const timelineChart = new Chart(timelineCtx, {
+    type: "line",
+    data: {
+        labels: timelineLabels,
+        datasets: [{
+            label: "Attacks Over Time",
+            data: timelineData,
+            fill: false
+        }]
+    },
+    options: {
+        scales: {
+            y: { beginAtZero: true }
+        }
+    }
+});
+
+// ==================== SOCKET EVENTS ====================
+socket.on("connect", () => {
+    console.log("✅ Connected to server");
+});
+
+socket.on("new_log", (data) => {
+    console.log("📥 RECEIVED:", data);
+
+    // Add log
+    let msg = `[${data.timestamp}] ${data.type} → ${data.can_id}`;
+
+    if (data.threat_score >= 80) {
+        msg += " 🚨 CRITICAL SYSTEM";
+    } else if (data.threat_score >= 50) {
+        msg += " ⚠️ ECU ISOLATED";
+    }
+
+    const entry = document.createElement("p");
+    entry.textContent = msg;
+    logDiv.prepend(entry);
+
+    // Update threat score
+    if (data.threat_score !== undefined) {
+        document.getElementById("score").textContent = data.threat_score;
+    }
+
+    // Update attack counts
+    if (counts[data.type]) {
+        counts[data.type]++;
+    } else {
+        counts[data.type] = 1;
+    }
+
+    chart.data.labels = Object.keys(counts);
+    chart.data.datasets[0].data = Object.values(counts);
+    chart.update();
+
+    // Update timeline
+    const time = data.timestamp.split(" ")[1];
+
+    timelineLabels.push(time);
+    timelineData.push(1);
+
+    if (timelineLabels.length > 20) {
+        timelineLabels.shift();
+        timelineData.shift();
+    }
+
+    timelineChart.update();
+});
+</script>
+
+</body>
+</html>
+
